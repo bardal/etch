@@ -16,7 +16,7 @@ const APP = process.env.APP_URL || 'http://127.0.0.1:8080/index.html';
 // Wipes what the app has stored and reloads, so a suite starts from nothing
 // rather than from whatever the last one left in IndexedDB.
 async function resetApp(page, settle = 500) {
-  await page.evaluate(async () => { await dbDelete('doc'); await dbDelete('image'); });
+  await page.evaluate(async () => { await dbDelete('doc'); await dbDelete('image'); await dbDelete('history'); });
   await page.reload();
   await page.waitForTimeout(settle);
 }

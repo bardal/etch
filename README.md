@@ -12,6 +12,7 @@ uploaded - it all runs on your device.
 - **Automatic conversion**: HEIC files are converted to JPEG in your browser
 - **Privacy-focused**: No files uploaded to servers
 - **Flexible loading**: Open files, drag and drop, or paste from clipboard
+- **Earlier images**: The last 10 images you replaced are kept with their drawings; long-press or right-click the canvas and pick Previous image / Next image to step through them
 
 ### 🎨 **Drawing Tools**
 - **Rectangle**: Click and drag to draw rectangles
