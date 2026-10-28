@@ -183,7 +183,7 @@ You can load images in three convenient ways:
 
 ## 📝 **File Structure**
 ```
-image_editor/
+etch/
 ├── index.html          # Main application file
 └── README.md          # This file
 ```

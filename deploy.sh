@@ -1,12 +1,12 @@
 #!/bin/bash
-# Deploy image editor to barney.daltons.net/image_editor
+# Deploy Etch to barney.daltons.net/etch
 #
 # Usage: ./deploy.sh
 #
 # Configure by creating a .env file (see .env.example):
 #   DEPLOY_HOST     - SSH/FTP host (default: daltons.net)
 #   DEPLOY_USER     - cPanel username
-#   DEPLOY_PATH     - Remote path from home dir (default: public_html/barney/image_editor)
+#   DEPLOY_PATH     - Remote path from home dir (default: public_html/barney/etch)
 #   DEPLOY_METHOD   - "ssh" or "ftp" (default: ssh)
 #   DEPLOY_PORT     - SSH port (default: 22)
 
@@ -21,7 +21,7 @@ fi
 
 HOST="${DEPLOY_HOST:-daltons.net}"
 USER="${DEPLOY_USER:?Set DEPLOY_USER in .env or environment}"
-REMOTE_PATH="${DEPLOY_PATH:-public_html/barney/image_editor}"
+REMOTE_PATH="${DEPLOY_PATH:-public_html/barney/etch}"
 METHOD="${DEPLOY_METHOD:-ssh}"
 PORT="${DEPLOY_PORT:-22}"
 
@@ -75,4 +75,4 @@ else
     exit 1
 fi
 
-echo "Done! https://barney.daltons.net/image_editor/"
+echo "Done! https://barney.daltons.net/etch/"

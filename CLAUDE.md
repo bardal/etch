@@ -21,7 +21,7 @@ suites pass, and the phone this app is tested on loads the deployed build - so
 a change parked on a side branch is a change nobody can try. Feature branches
 have only ever meant pushing the same commits twice.
 
-**Deploy:** `./deploy.sh` — deploys via SSH (default) or FTP to barney.daltons.net/image_editor. Requires `.env` with `DEPLOY_USER` (see `.env.example`). CI publishes to GitHub Pages from `main` once the suites pass (`.github/workflows/pages.yml`).
+**Deploy:** `./deploy.sh` — deploys via SSH (default) or FTP to barney.daltons.net/etch. Requires `.env` with `DEPLOY_USER` (see `.env.example`). CI publishes to GitHub Pages from `main` once the suites pass (`.github/workflows/pages.yml`).
 
 ## Architecture
 
