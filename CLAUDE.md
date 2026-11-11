@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 No build step required. Open `index.html` in a browser to run the app.
 
-**Test:** `npm test` (or `./tests/run-all.sh`) — 31 Playwright suites driving a real Chromium against a served copy of the app, about two minutes in all. **Run the whole suite before pushing any change to `index.html`.** The same command gates the deploy in CI, so a change that fails here never reaches the site; finding that out locally costs two minutes, finding it out from CI costs a round trip.
+**Test:** `npm test` (or `./tests/run-all.sh`) — 32 Playwright suites driving a real Chromium against a served copy of the app, about two minutes in all. **Run the whole suite before pushing any change to `index.html`.** The same command gates the deploy in CI, so a change that fails here never reaches the site; finding that out locally costs two minutes, finding it out from CI costs a round trip.
 
 There is a suite per area — `zoom`, `pinch`, `rotate`, `line`, `crop`, `tear`, `undo`, `persist`, `paste`, `highlight`, `units`, `editorpos` and the rest. To iterate on one, serve the repo (`python3 -m http.server 8080 &`) and run it alone: `node tests/zoom-test.js`. It needs a real origin, not `file://` — IndexedDB, the clipboard and the service worker are all unavailable there. A suite passes by asserting its own report, not merely by the page not throwing, so a failure means behaviour changed. `tests/README.md` explains how a suite is written and the two-unit rule (`fitPxToCanvas` vs `screenPxToCanvas`) that most visual faults here have come down to.
 
@@ -21,7 +21,7 @@ suites pass, and the phone this app is tested on loads the deployed build - so
 a change parked on a side branch is a change nobody can try. Feature branches
 have only ever meant pushing the same commits twice.
 
-**Deploy:** `./deploy.sh` — deploys via SSH (default) or FTP to barney.daltons.net/etch. Requires `.env` with `DEPLOY_USER` (see `.env.example`). CI publishes to GitHub Pages from `main` once the suites pass (`.github/workflows/pages.yml`).
+**Deploy:** GitHub Actions only (`.github/workflows/pages.yml`): every push to `main` runs the suites, then publishes to GitHub Pages, served at https://etch.daltons.net (custom domain; CNAME `etch` -> `bardal.github.io` in the daltons.net cPanel zone). Nothing is deployed by hand. The old addresses barney.daltons.net/etch/ and /image_editor/ redirect there from an `.htaccess` on the daltons.net host.
 
 ## Architecture
 

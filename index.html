@@ -1211,6 +1211,8 @@
 
         /* Only where the status bar's own chip is not there to do the job. */
         .tb-about { display: none; }
+        .tb-capture { display: none; }
+        body.can-capture .tb-capture { display: flex; }
 
         /* Glyphs that differ by input: see the save button. */
         .icon-coarse { display: none; }
@@ -1243,6 +1245,9 @@
            up it is: the same two rows, the same 90px, the tools where a thumb
            is rather than as far from one as the screen allows. */
         @media (max-width: 600px), (max-height: 500px) and (pointer: coarse) {
+            /* The pill is the four file actions a phone needs; capture is a
+               desktop job, and a narrow window still has it in the menu. */
+            body.can-capture .tb-capture { display: none; }
             /* The top bar was a band of its own: 46px of opaque chrome across
                the whole screen carrying four file actions that between them
                covered a sixth of its width, with nothing in the rest of it.
@@ -1694,7 +1699,8 @@
         <symbol id="i-save" viewBox="0 0 24 24"><path d="M12 5.23v9.3"/><path d="M8.62 12l3.38 3.38 3.38 -3.38"/><path d="M6.08 18.77h11.84"/></symbol>
         <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 15.38V5.23"/><path d="M8.62 8.62l3.38 -3.38 3.38 3.38"/><path d="M6.08 12.85v5.07a0.85 0.85 0 0 0 0.85 0.85h10.15a0.85 0.85 0 0 0 0.85 -0.85v-5.07"/></symbol>
         <symbol id="i-copy" viewBox="0 0 24 24"><rect x="10.49" y="10.49" width="8.28" height="8.28" rx="1.51"/><path d="M7.48 15.01H6.73a1.51 1.51 0 0 1 -1.51 -1.51V6.73a1.51 1.51 0 0 1 1.51 -1.51h6.77a1.51 1.51 0 0 1 1.51 1.51v0.75"/></symbol>
-        <symbol id="i-paste" viewBox="0 0 24 24"><path d="M9.8 6.32H8.34a1.47 1.47 0 0 0 -1.47 1.47v9.52a1.47 1.47 0 0 0 1.47 1.47h7.33a1.47 1.47 0 0 0 1.47 -1.47V7.79a1.47 1.47 0 0 0 -1.47 -1.47h-1.47"/><rect x="9.8" y="5.22" width="4.4" height="2.56" rx="0.73"/><path d="M12 10.72v4.4"/><path d="M10.17 13.28L12 15.11l1.83 -1.83"/></symbol>
+        <symbol id="i-capture" viewBox="0 0 24 24"><rect x="4.98" y="5.98" width="14.04" height="9.78" rx="1.51"/><path d="M9.74 18.77h4.52"/><path d="M12 15.76v3.01"/></symbol>
+        <symbol id="i-paste"viewBox="0 0 24 24"><path d="M9.8 6.32H8.34a1.47 1.47 0 0 0 -1.47 1.47v9.52a1.47 1.47 0 0 0 1.47 1.47h7.33a1.47 1.47 0 0 0 1.47 -1.47V7.79a1.47 1.47 0 0 0 -1.47 -1.47h-1.47"/><rect x="9.8" y="5.22" width="4.4" height="2.56" rx="0.73"/><path d="M12 10.72v4.4"/><path d="M10.17 13.28L12 15.11l1.83 -1.83"/></symbol>
         <symbol id="i-undo" viewBox="0 0 24 24"><path d="M5.24 9.75h9.01a4.51 4.51 0 0 1 0 9.01H8.85"/><path d="M5.24 9.75l4.51 -4.51"/><path d="M5.24 9.75l4.51 4.51"/></symbol>
         <symbol id="i-clear" viewBox="0 0 24 24"><path d="M5.63 7.62h12.74"/><path d="M10.41 7.62V6.03a0.8 0.8 0 0 1 0.8 -0.8h1.59a0.8 0.8 0 0 1 0.8 0.8v1.59"/><path d="M7.22 7.62l0.8 10.35a0.8 0.8 0 0 0 0.8 0.8h6.37a0.8 0.8 0 0 0 0.8 -0.8l0.8 -10.35"/></symbol>
         <symbol id="i-select" viewBox="0 0 24 24"><path d="M6.6 5.75L17.4 11.55l-4.6 1.5L10.8 18.25z"/></symbol>
@@ -1743,6 +1749,12 @@
             <button class="tb-btn" id="copyImage" title="Copy Image to Clipboard (Ctrl+C)">
                 <span class="btn-icon"><svg><use href="#i-copy"/></svg></span>
                 <span class="btn-label">Copy</span>
+            </button>
+            <!-- Desktop only: no phone browser can capture the screen, so it
+                 is shown by canCaptureScreen() rather than by default. -->
+            <button class="tb-btn tb-capture" id="captureScreen" title="Capture a screen, window or tab to annotate">
+                <span class="btn-icon"><svg><use href="#i-capture"/></svg></span>
+                <span class="btn-label">Capture</span>
             </button>
             <!-- On a phone the status bar is gone, and with it the chip that
                  opened this. The build number is worth being able to find. -->
@@ -4498,6 +4510,7 @@
                 } });
             } else {
                 items.push({ label: 'Paste image', run: pasteFromClipboard });
+                if (canCaptureScreen()) items.push({ label: 'Capture screen…', run: captureScreen });
                 items.push({ label: 'Open image…', run: () => document.getElementById('imgLoader').click() });
                 if (historyCount) items.push({ label: 'Previous image', run: () => cycleHistory(1) });
                 // With one earlier picture, back and forward are the same swap.
@@ -6587,6 +6600,127 @@
             }
         }
         
+        // ===== SCREEN CAPTURE =====
+        // Takes one frame of a screen, window or tab through the browser's own
+        // screen-sharing picker and opens it as the picture to annotate.
+        //
+        // Desktop only. No iPhone or iPad browser has getDisplayMedia and
+        // Android's is patchy, so a coarse pointer is not offered it at all;
+        // a phone takes a screenshot the phone's way and opens or pastes it.
+        function canCaptureScreen() {
+            return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)
+                && !isCoarsePointer();
+        }
+
+        function updateCaptureAvailability() {
+            document.body.classList.toggle('can-capture', canCaptureScreen());
+        }
+
+        // The pause between countdown steps before a whole-screen grab. A
+        // variable so the suite can count the countdown instead of sitting it.
+        let captureWait = ms => new Promise(res => setTimeout(res, ms));
+        const CAPTURE_COUNTDOWN = 3;
+        let capturing = false;
+
+        function screenshotName(when = new Date()) {
+            const p = n => String(n).padStart(2, '0');
+            return `Screenshot ${when.getFullYear()}-${p(when.getMonth() + 1)}-${p(when.getDate())}`
+                + ` at ${p(when.getHours())}.${p(when.getMinutes())}.${p(when.getSeconds())}.png`;
+        }
+
+        // The newest frame of a shared screen, as a canvas. ImageCapture where
+        // the browser has it (Chromium), because it does not depend on the
+        // page being visible; a <video> element everywhere else.
+        async function grabFrame(track, stream) {
+            const out = document.createElement('canvas');
+            if (typeof ImageCapture === 'function') {
+                try {
+                    const bitmap = await new ImageCapture(track).grabFrame();
+                    out.width = bitmap.width; out.height = bitmap.height;
+                    out.getContext('2d').drawImage(bitmap, 0, 0);
+                    if (bitmap.close) bitmap.close();
+                    return out;
+                } catch (err) {
+                    // Fall through to the video element.
+                }
+            }
+            const video = document.createElement('video');
+            video.muted = true;
+            video.playsInline = true;
+            video.srcObject = stream;
+            await new Promise((res, rej) => {
+                video.onloadeddata = res;
+                video.onerror = () => rej(new Error('The shared screen sent no picture'));
+            });
+            await video.play().catch(() => {});
+            out.width = video.videoWidth; out.height = video.videoHeight;
+            out.getContext('2d').drawImage(video, 0, 0);
+            video.srcObject = null;
+            return out;
+        }
+
+        async function captureScreen() {
+            if (capturing) return;
+            if (!canCaptureScreen()) {
+                showToast('Screen capture needs a browser on a computer');
+                return;
+            }
+            capturing = true;
+            let stream = null;
+            try {
+                // Chromium switches to a tab or window when it is picked, which
+                // would leave Etch behind it; asking to stay in front keeps the
+                // picture in view the moment it is taken.
+                const controller = typeof CaptureController === 'function' ? new CaptureController() : null;
+                // Asked for with no size, Chromium hands over the screen scaled
+                // down to 1280 wide: a 2560x1080 monitor came back 1280x540.
+                // A ceiling well above any screen gets its own pixels; `max`
+                // rather than `ideal` because nothing should be scaled up.
+                const options = {
+                    video: { width: { max: 8192 }, height: { max: 8192 } },
+                    audio: false,
+                };
+                if (controller) options.controller = controller;
+                try {
+                    stream = await navigator.mediaDevices.getDisplayMedia(options);
+                } catch (err) {
+                    // Cancel in the picker is not a failure.
+                    if (err && (err.name === 'NotAllowedError' || err.name === 'AbortError')) return;
+                    throw err;
+                }
+                const track = stream.getVideoTracks()[0];
+                const surface = (track.getSettings && track.getSettings().displaySurface) || '';
+                // Must be called straight after the picker resolves, before any
+                // await, or the browser has already moved focus.
+                if (controller && controller.setFocusBehavior && surface !== 'monitor') {
+                    try { controller.setFocusBehavior('focus-capturing-application'); } catch (e) { /* not offered */ }
+                }
+
+                // A whole screen has Etch on top of it when the picker closes,
+                // so give the person a moment to bring up what they meant.
+                if (surface === 'monitor') {
+                    for (let n = CAPTURE_COUNTDOWN; n > 0; n--) {
+                        showToast(`Capturing the screen in ${n}…`);
+                        await captureWait(1000);
+                    }
+                }
+
+                const frame = await grabFrame(track, stream);
+                stream.getTracks().forEach(t => t.stop());
+                stream = null;
+                if (!frame.width || !frame.height) throw new Error('The shared screen sent no picture');
+                const blob = await new Promise(res => frame.toBlob(res, 'image/png'));
+                await processImageFile(new File([blob], screenshotName(), { type: 'image/png' }));
+                showToast('Screen captured');
+            } catch (err) {
+                console.error('Screen capture failed:', err);
+                showToast('Could not capture the screen');
+            } finally {
+                if (stream) stream.getTracks().forEach(t => t.stop());
+                capturing = false;
+            }
+        }
+
         // ===== EVENT LISTENERS =====
         function setupEventListeners() {
             // Canvas events
@@ -7026,6 +7160,7 @@
             };
             document.getElementById('copyImage').onclick = copyImageToClipboard;
             document.getElementById('pasteImage').onclick = pasteFromClipboard;
+            document.getElementById('captureScreen').onclick = captureScreen;
 
             // File open button
             document.getElementById('openFile').onclick = () => {
@@ -7103,6 +7238,7 @@
             initBuildInfo();
             updateSwatches();
             setupEventListeners();
+            updateCaptureAvailability();
             resizeCanvas();
             updateButtonStates();
             updateImageInfo();

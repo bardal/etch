@@ -12,6 +12,7 @@ uploaded - it all runs on your device.
 - **Automatic conversion**: HEIC files are converted to JPEG in your browser
 - **Privacy-focused**: No files uploaded to servers
 - **Flexible loading**: Open files, drag and drop, or paste from clipboard
+- **Screen capture** (computer only): Capture opens the browser's share picker - pick a tab, a window or the whole screen and that moment becomes the picture to annotate. A whole screen counts down 3 seconds first, so you can bring up what you meant. Phones and tablets cannot capture the screen from a browser, so the button is not shown there
 - **Earlier images**: The last 10 images you replaced are kept with their drawings; long-press or right-click the canvas and pick Previous image / Next image to step through them
 
 ### 🎨 **Drawing Tools**
