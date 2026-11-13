@@ -1173,6 +1173,95 @@
             transform: translateX(-50%) translateY(0);
         }
 
+        /* ===== AREA PICKER =====
+           The captured frame, frozen and filling the window, to drag a box
+           round the part wanted. Above everything, the menu included, because
+           nothing else can be used while it is up. */
+        .area-picker {
+            position: fixed;
+            inset: 0;
+            display: none;
+            flex-direction: column;
+            background: #000;
+            z-index: 2200;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .area-picker.open { display: flex; }
+        .area-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 8px 16px;
+            background: #1a1a1e;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            color: #c8c8cc;
+            font-size: 13px;
+            flex-wrap: wrap;
+        }
+        .area-bar .area-hint { margin-right: 6px; }
+        .area-bar kbd {
+            font-family: inherit;
+            font-size: 10px;
+            margin-left: 4px;
+            padding: 0 4px;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 4px;
+            opacity: 0.8;
+        }
+        .area-bar button {
+            height: var(--ctl-h);
+            padding: 0 12px;
+            font-family: inherit;
+            font-size: 12px;
+            color: #e4e4e8;
+            background: var(--ctl-bg);
+            border: 1px solid var(--ctl-bd);
+            border-radius: var(--ctl-r);
+            cursor: pointer;
+        }
+        .area-bar button:hover { background: rgba(255,255,255,0.12); }
+        .area-bar button.primary { background: #3b8eed; border-color: #3b8eed; color: #fff; }
+        .area-stage {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        /* Shown no bigger than it is, and no bigger than the window. */
+        #areaCanvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        /* The box, with the rest of the frame dimmed by its own shadow. */
+        /* Inside the stage, whose overflow clips the shadow off the bar. */
+        .area-box {
+            position: absolute;
+            display: none;
+            border: 1px solid #3b8eed;
+            box-shadow: 0 0 0 100vmax rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        .area-size {
+            position: absolute;
+            left: 0;
+            top: 100%;
+            margin-top: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: #fff;
+            background: rgba(20,20,24,0.9);
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
         /* ===== MODAL ===== */
         .modal {
             display: none;
@@ -1969,6 +2058,19 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <div id="contextMenu" class="context-menu" role="menu"></div>
+
+    <!-- After a screen capture: pick the part of the frame to keep. -->
+    <div id="areaPicker" class="area-picker" role="dialog" aria-label="Choose the area to capture">
+        <div class="area-bar">
+            <span class="area-hint">Drag round the part you want</span>
+            <button id="areaWhole" class="primary" type="button">Whole thing<kbd>Enter</kbd></button>
+            <button id="areaCancel" type="button">Cancel<kbd>Esc</kbd></button>
+        </div>
+        <div class="area-stage" id="areaStage">
+            <canvas id="areaCanvas"></canvas>
+            <div class="area-box" id="areaBox"><span class="area-size" id="areaSize"></span></div>
+        </div>
+    </div>
 
     <!-- Clear options -->
     <div id="clearModal" class="modal">
@@ -6659,6 +6761,128 @@
             return out;
         }
 
+        // Shows a captured frame filling the window and lets the person drag a
+        // box round the part they want. Resolves with that part as a canvas,
+        // the whole frame for Enter or "Whole thing", or null for Escape or
+        // "Cancel". A browser cannot draw over other apps, so picking from the
+        // frozen frame is the only way to take a rectangle of a screen.
+        //
+        // A box is taken the moment the button comes up, as Snipping Tool
+        // does. A click with no drag is not a box and leaves the picker open.
+        const AREA_MIN_DRAG = 4; // screen px, each way
+        function pickArea(frame) {
+            const picker = document.getElementById('areaPicker');
+            const view = document.getElementById('areaCanvas');
+            const stage = document.getElementById('areaStage');
+            const box = document.getElementById('areaBox');
+            const size = document.getElementById('areaSize');
+            const wholeBtn = document.getElementById('areaWhole');
+            const cancelBtn = document.getElementById('areaCancel');
+            view.width = frame.width; view.height = frame.height;
+            view.getContext('2d').drawImage(frame, 0, 0);
+            box.style.display = 'none';
+            closeContextMenu();
+            picker.classList.add('open');
+
+            return new Promise(resolve => {
+                let start = null; // in frame pixels
+                let pointerId = null;
+
+                // The frame is drawn by CSS at some fraction of its size, so a
+                // screen point is mapped through the canvas's own box. Points
+                // off the picture count as its nearest edge.
+                const toFrame = e => {
+                    const r = view.getBoundingClientRect();
+                    const x = (e.clientX - r.left) * frame.width / r.width;
+                    const y = (e.clientY - r.top) * frame.height / r.height;
+                    return [Math.min(frame.width, Math.max(0, x)),
+                            Math.min(frame.height, Math.max(0, y))];
+                };
+                const rectFrom = (a, b) => {
+                    const x0 = Math.round(Math.min(a[0], b[0])), y0 = Math.round(Math.min(a[1], b[1]));
+                    const x1 = Math.round(Math.max(a[0], b[0])), y1 = Math.round(Math.max(a[1], b[1]));
+                    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+                };
+                const screenScale = () => view.getBoundingClientRect().width / frame.width;
+                const showBox = rect => {
+                    const r = view.getBoundingClientRect();
+                    const o = stage.getBoundingClientRect();
+                    const k = r.width / frame.width;
+                    box.style.display = 'block';
+                    box.style.left = (r.left - o.left + rect.x * k) + 'px';
+                    box.style.top = (r.top - o.top + rect.y * k) + 'px';
+                    box.style.width = (rect.w * k) + 'px';
+                    box.style.height = (rect.h * k) + 'px';
+                    size.textContent = `${rect.w} × ${rect.h}`;
+                    // Below the box, or inside it where the stage would clip it.
+                    const below = r.top - o.top + (rect.y + rect.h) * k + 24 <= o.height;
+                    size.style.top = below ? '100%' : '0';
+                };
+                // Big enough to be meant, measured on screen, not in the frame.
+                const isDrag = rect => {
+                    const k = screenScale();
+                    return rect.w > 0 && rect.h > 0
+                        && rect.w * k >= AREA_MIN_DRAG && rect.h * k >= AREA_MIN_DRAG;
+                };
+                const crop = rect => {
+                    const out = document.createElement('canvas');
+                    out.width = rect.w; out.height = rect.h;
+                    out.getContext('2d').drawImage(frame, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+                    return out;
+                };
+
+                function down(e) {
+                    if (e.button !== 0 || pointerId !== null) return;
+                    e.preventDefault();
+                    pointerId = e.pointerId;
+                    try { stage.setPointerCapture(pointerId); } catch (err) {}
+                    start = toFrame(e);
+                    box.style.display = 'none';
+                }
+                function move(e) {
+                    if (e.pointerId !== pointerId || !start) return;
+                    const rect = rectFrom(start, toFrame(e));
+                    if (isDrag(rect)) showBox(rect); else box.style.display = 'none';
+                }
+                function up(e) {
+                    if (e.pointerId !== pointerId || !start) return;
+                    const rect = rectFrom(start, toFrame(e));
+                    start = null; pointerId = null;
+                    if (isDrag(rect)) done(crop(rect));
+                    else box.style.display = 'none';
+                }
+                function cancelDrag() { start = null; pointerId = null; box.style.display = 'none'; }
+                // Taken ahead of the app's own shortcuts, which must not act on
+                // the picture hidden behind the picker.
+                function key(e) {
+                    e.stopImmediatePropagation();
+                    if (e.key === 'Enter') { e.preventDefault(); done(frame); }
+                    else if (e.key === 'Escape') { e.preventDefault(); done(null); }
+                }
+                function done(result) {
+                    picker.classList.remove('open');
+                    box.style.display = 'none';
+                    stage.removeEventListener('pointerdown', down);
+                    stage.removeEventListener('pointermove', move);
+                    stage.removeEventListener('pointerup', up);
+                    stage.removeEventListener('pointercancel', cancelDrag);
+                    window.removeEventListener('keydown', key, true);
+                    wholeBtn.onclick = cancelBtn.onclick = null;
+                    // Let go of the frame's copy; a 4K frame is 33MB.
+                    view.width = view.height = 0;
+                    resolve(result);
+                }
+
+                stage.addEventListener('pointerdown', down);
+                stage.addEventListener('pointermove', move);
+                stage.addEventListener('pointerup', up);
+                stage.addEventListener('pointercancel', cancelDrag);
+                window.addEventListener('keydown', key, true);
+                wholeBtn.onclick = () => done(frame);
+                cancelBtn.onclick = () => done(null);
+            });
+        }
+
         async function captureScreen() {
             if (capturing) return;
             if (!canCaptureScreen()) {
@@ -6709,7 +6933,9 @@
                 stream.getTracks().forEach(t => t.stop());
                 stream = null;
                 if (!frame.width || !frame.height) throw new Error('The shared screen sent no picture');
-                const blob = await new Promise(res => frame.toBlob(res, 'image/png'));
+                const picked = await pickArea(frame);
+                if (!picked) return; // Escape: the picture before stays.
+                const blob = await new Promise(res => picked.toBlob(res, 'image/png'));
                 await processImageFile(new File([blob], screenshotName(), { type: 'image/png' }));
                 showToast('Screen captured');
             } catch (err) {
