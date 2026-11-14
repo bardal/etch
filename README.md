@@ -33,6 +33,8 @@ uploaded - it all runs on your device.
 - **Select tool**: Click to select shapes
 - **Drag & drop**: Move selected shapes by dragging
 - **Rotation handles**: Rotate shapes and text with the green handle
+- **Text while typing**: drag the grips on either side of the box to change its width, and type an angle in the box beside Cancel and Done
+- **Text background**: Fill and the fill colour work on text as on boxes and callouts
 - **Shape cycling**: Click multiple times on overlapping shapes to cycle through them
 - **Smart selection**: Drag to move, click to cycle
 

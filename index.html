@@ -853,6 +853,73 @@
 
         .block-edit-bar.open { display: flex; }
 
+        /* The angle of the text being typed, beside Cancel and Done. 16px
+           text in the field: smaller and iOS zooms the page on focus. */
+        .block-angle {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 8px;
+            border-radius: var(--ctl-r);
+            background: rgba(32,32,36,0.95);
+            border: 1px solid var(--ctl-bd);
+            color: #d8d8dc;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+        }
+        .block-angle.hidden { display: none; }
+        .block-angle-icon {
+            width: var(--icon);
+            height: var(--icon);
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 1.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .block-angle input {
+            width: 2.4em;
+            font-family: inherit;
+            font-size: 16px;
+            color: #f0f0f2;
+            background: transparent;
+            border: none;
+            outline: none;
+            text-align: right;
+            -moz-appearance: textfield;
+        }
+        .block-angle input::-webkit-outer-spin-button,
+        .block-angle input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+        /* The width grips on the sides of the text being typed. A thin bar
+           to look at inside a target a pointer can land on: --ctl-h tall, and
+           as wide as tall on a finger. */
+        .block-grip {
+            position: absolute;
+            display: none;
+            width: 16px;
+            height: var(--ctl-h);
+            z-index: 1001;
+            cursor: ew-resize;
+            touch-action: none;
+        }
+        .block-grip.open { display: block; }
+        .block-grip::after {
+            content: '';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            width: 6px;
+            height: 70%;
+            transform: translate(-50%, -50%);
+            background: #3b8eed;
+            border: 1px solid #fff;
+            border-radius: 3px;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+        }
+        @media (pointer: coarse) {
+            .block-grip { width: var(--ctl-h); }
+        }
+
         /* Positioned against the picture's own box rather than the window, so
            they clear the readouts and the property bar without knowing how
            tall either of those happens to be. Off on a mouse, where the top
@@ -2018,7 +2085,9 @@
                 <canvas id="canvas" width="800" height="600"></canvas>
                 <input type="text" id="canvasTextInput" class="canvas-text-input" placeholder="Type here...">
                 <textarea id="calloutTextInput" class="callout-text-input" placeholder="Type your note…"></textarea>
-                <div id="blockEditBar" class="block-edit-bar"><button type="button" id="blockCancel">Cancel</button><button type="button" id="blockDone" class="primary">Done</button></div>
+                <div id="blockGripW" class="block-grip" title="Drag to change the width"></div>
+                <div id="blockGripE" class="block-grip" title="Drag to change the width"></div>
+                <div id="blockEditBar" class="block-edit-bar"><label class="block-angle" id="blockAngleField" title="Angle of the text, in degrees"><svg class="block-angle-icon" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4.5h-4.5"/></svg><input type="number" id="blockAngle" min="-180" max="180" step="1" inputmode="numeric" aria-label="Angle in degrees"><span>°</span></label><button type="button" id="blockCancel">Cancel</button><button type="button" id="blockDone" class="primary">Done</button></div>
                 <!-- Undo and the bin, floating over the picture on a phone.
                      They were in the top corners, which is the furthest part
                      of the screen from a thumb, and they are the two things
@@ -2916,7 +2985,7 @@
 
         // Shapes that enclose an area, and so can be filled.
         function canFill(s) {
-            return !!s && (s.type === 'rect' || s.type === 'ellipse' || s.type === 'callout' ||
+            return !!s && (s.type === 'rect' || s.type === 'ellipse' || s.type === 'callout' || s.type === 'text' ||
                           (s.type === 'polyline' && s.closed));
         }
 
@@ -3204,9 +3273,9 @@
                 const bottom = Math.max(shape.y, shape.y + shape.h);
                 return x >= left && x <= right && y >= top && y <= bottom;
             } else if (shape.type === 'text') {
-                const m = textBlockMetrics(shape);
-                return x >= shape.x && x <= shape.x + shape.w &&
-                       y >= shape.y && y <= shape.y + m.height;
+                const f = blockFrame(shape);
+                const p = f.toLocal(x, y);
+                return p.x >= 0 && p.x <= shape.w && p.y >= 0 && p.y <= f.h;
             } else if (shape.type === 'arrow') {
                 const ep = (shape.fromId || shape.toId) ? getConnectorEndpoints(shape) : { x1: shape.x, y1: shape.y, x2: shape.x2, y2: shape.y2 };
                 return isPointNearLine(x, y, ep.x1, ep.y1, ep.x2, ep.y2, Math.max(shape.size || 3, lineGrabWidth()));
@@ -3357,10 +3426,10 @@
                 // single line with no width - on a real block that lands inside
                 // the box, on top of the words, and swallowed the presses meant
                 // to edit them.
-                const height = textBlockMetrics(shape).height;
-                const centerX = shape.x + shape.w / 2;
-                const centerY = shape.y + height / 2;
-                const handleDistance = Math.max(Math.abs(shape.w), Math.abs(height)) / 2 + rotationGap();
+                const f = blockFrame(shape);
+                const centerX = f.cx;
+                const centerY = f.cy;
+                const handleDistance = Math.max(Math.abs(shape.w), Math.abs(f.h)) / 2 + rotationGap();
                 return {
                     x: centerX + handleDistance * Math.cos(shape.rotation || 0),
                     y: centerY + handleDistance * Math.sin(shape.rotation || 0),
@@ -3403,9 +3472,10 @@
             // Text blocks are sized by width alone; the height follows the
             // text. A callout adds its tip on top of the same two handles.
             if (shape.type === 'callout' || shape.type === 'text') {
+                const f = blockFrame(shape);
                 const handles = [
-                    { x: shape.x, y: shape.y + shape.h / 2, type: 'block-w', cursor: 'ew-resize' },
-                    { x: shape.x + shape.w, y: shape.y + shape.h / 2, type: 'block-e', cursor: 'ew-resize' },
+                    { ...f.toWorld(0, f.h / 2), type: 'block-w', cursor: 'ew-resize' },
+                    { ...f.toWorld(shape.w, f.h / 2), type: 'block-e', cursor: 'ew-resize' },
                 ];
                 if (shape.type === 'callout') {
                     handles.push({ x: shape.tipX, y: shape.tipY, type: 'callout-tip', cursor: 'move' });
@@ -3573,7 +3643,8 @@
             } else if (shape.type === 'callout') {
                 return { x: shape.x + shape.w / 2, y: shape.y + shape.h / 2 };
             } else if (shape.type === 'text') {
-                return { x: shape.x + (shape.w || 0) / 2, y: shape.y + (shape.h || 0) / 2 };
+                const f = blockFrame(shape);
+                return { x: f.cx, y: f.cy };
             }
             return { x: 0, y: 0 };
         }
@@ -3787,7 +3858,7 @@
             // colour before drawing is the usual way round - but with the
             // select tool and nothing picked, neither applies to anything.
             const drawingTools = ['rect', 'highlight', 'ellipse', 'arrow', 'polyline', 'text', 'callout'];
-            const fillableTools = ['rect', 'ellipse', 'polyline', 'callout'];
+            const fillableTools = ['rect', 'ellipse', 'polyline', 'callout', 'text'];
             const showLine = drawingTools.includes(tool) || selectedShape !== null;
             // While words are being typed the font controls take the row, and
             // fill steps aside so they can share it. Otherwise the row grows a
@@ -3979,8 +4050,9 @@
             if (s.rotation && !temp) {
                 let centerX, centerY;
                 if (s.type === 'text') {
-                    centerX = s.x;
-                    centerY = s.y + textHeightOf(s) / 2;
+                    const f = blockFrame(s);
+                    centerX = f.cx;
+                    centerY = f.cy;
                 } else {
                     centerX = s.x + s.w / 2;
                     centerY = s.y + s.h / 2;
@@ -4054,6 +4126,7 @@
             } else if (s.type === 'callout') {
                 drawCallout(s);
             } else if (s.type === 'text') {
+                if (s.fill) drawTextBackground(s);
                 drawTextBlock(s);
             }
 
@@ -4148,6 +4221,101 @@
         }
         function calloutMinWidth() { return fitPxToCanvas(70); }
 
+        // A text block's background: a rounded box a little outside the words,
+        // so switching it on leaves them where they were and they do not sit
+        // on its edge. No outline - the outline is what makes a callout.
+        function textBackgroundMargin() { return fitPxToCanvas(6); }
+        function drawTextBackground(s) {
+            const h = textBlockMetrics(s).height;
+            const m = textBackgroundMargin();
+            const x = s.x - m, y = s.y - m, w = s.w + 2 * m, bh = h + 2 * m;
+            const r = Math.min(fitPxToCanvas(6), w / 2, bh / 2);
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.arcTo(x + w, y, x + w, y + bh, r);
+            ctx.arcTo(x + w, y + bh, x, y + bh, r);
+            ctx.arcTo(x, y + bh, x, y, r);
+            ctx.arcTo(x, y, x + w, y, r);
+            ctx.closePath();
+            ctx.fillStyle = fillColorOf(s);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // ===== A TEXT BLOCK'S FRAME =====
+        // Where a text block is, turned: its centre, its turn, and the way from
+        // a point on the block (measured from its top-left, unturned) to the
+        // picture. Drawing, hit testing, the rotation handle, the side handles
+        // and the editor all go through this one answer. They used to have
+        // three: the words turned about a point on their left edge half a line
+        // down (from when text was one line), the rotation handle swung about
+        // the middle of the block, and the side handles did not turn at all -
+        // so a turned block's handles floated off its words.
+        function blockFrame(shape) {
+            const h = textBlockMetrics(shape).height;
+            const rot = shape.type === 'text' ? (shape.rotation || 0) : 0;
+            const cos = Math.cos(rot), sin = Math.sin(rot);
+            const cx = shape.x + shape.w / 2, cy = shape.y + h / 2;
+            const toWorld = (lx, ly) => {
+                const dx = lx - shape.w / 2, dy = ly - h / 2;
+                return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+            };
+            // The other way: a point on the picture, as a point on the block.
+            const toLocal = (x, y) => {
+                const dx = x - cx, dy = y - cy;
+                return { x: dx * cos + dy * sin + shape.w / 2, y: -dx * sin + dy * cos + h / 2 };
+            };
+            return { cx, cy, h, rot, cos, sin, toWorld, toLocal };
+        }
+
+        // A turned block that changes size - a line typed, its width dragged -
+        // would otherwise swing about its new centre and slide across the
+        // picture. This moves it back so the point that should stay put does:
+        // `before` is the box as it was, and the block's x/y/w/h already hold
+        // the new size with that point unmoved in the block's own terms.
+        function keepTurnedBlockInPlace(shape, before) {
+            const rot = shape.rotation || 0;
+            if (shape.type !== 'text' || !rot) return;
+            const c0 = { x: before.x + before.w / 2, y: before.y + before.h / 2 };
+            const c1 = { x: shape.x + shape.w / 2, y: shape.y + shape.h / 2 };
+            const ex = c0.x - c1.x, ey = c0.y - c1.y;
+            const cos = Math.cos(rot), sin = Math.sin(rot);
+            shape.x += ex - (ex * cos - ey * sin);
+            shape.y += ey - (ex * sin + ey * cos);
+        }
+
+        // Moves one side of a block to `local` - a distance along the block from
+        // its current left edge - leaving the other side where it is, on the
+        // picture as well as on the block.
+        function setBlockEdge(shape, side, local) {
+            const before = { x: shape.x, y: shape.y, w: shape.w, h: shape.h };
+            const min = calloutMinWidth();
+            if (side === 'w') {
+                const shift = Math.min(local, shape.w - min);
+                shape.x += shift;
+                shape.w -= shift;
+            } else {
+                shape.w = Math.max(min, local);
+            }
+            keepTurnedBlockInPlace(shape, before);
+        }
+
+        // The laid-out height, kept on the shape so hit detection and handles
+        // agree with what is drawn without recomputing the layout everywhere.
+        // A turned block grows from its top-left corner, not about its centre.
+        // Drawing and typing both come here, so neither can leave it stale.
+        function syncBlockHeight(s) {
+            const m = textBlockMetrics(s);
+            if (s.h > 0 && s.h !== m.height) {
+                const before = { x: s.x, y: s.y, w: s.w, h: s.h };
+                s.h = m.height;
+                keepTurnedBlockInPlace(s, before);
+            }
+            s.h = m.height;
+            return m;
+        }
+
         function calloutCornerRadius(s) {
             return Math.min(fitPxToCanvas(6), s.w / 2, s.h / 2);
         }
@@ -4218,10 +4386,7 @@
         // Draws the wrapped lines. Used by both the text tool and the callout,
         // so wrapping, line spacing and alignment behave identically in each.
         function drawTextBlock(s) {
-            const m = textBlockMetrics(s);
-            // Kept on the shape so hit detection and handles agree with what is
-            // drawn without recomputing the layout everywhere.
-            s.h = m.height;
+            const m = syncBlockHeight(s);
 
             ctx.save();
             ctx.fillStyle = s.color;
@@ -4287,6 +4452,7 @@
         // One editor for both text blocks and callouts.
         let editingBlock = null;
         let editingOriginalText = '';
+        let editingOriginalBox = null;
 
         function startBlockEditing(shape) {
             // The editor puts Done and Cancel in the same corner the floating
@@ -4303,6 +4469,7 @@
             // Keystrokes are written straight onto the shape so the box grows as
             // you type, so cancelling has to put back what was there.
             editingOriginalText = String(shape.text || '');
+            editingOriginalBox = { x: shape.x, y: shape.y, w: shape.w, h: shape.h, rotation: shape.rotation || 0 };
             isEditingText = true;
 
             const rect = canvas.getBoundingClientRect();
@@ -4310,14 +4477,12 @@
             const origin = canvasOriginInContainer();
             const pad = calloutPadding() * toScreen;
 
-            calloutTextInput.style.left = (origin.x + shape.x * toScreen) + 'px';
-            calloutTextInput.style.top = (origin.y + shape.y * toScreen) + 'px';
-            calloutTextInput.style.width = (shape.w * toScreen) + 'px';
             const isCallout = shape.type === 'callout';
             calloutTextInput.style.padding = (isCallout ? pad : 0) + 'px';
             // A plain text block has no box, so the editor should not draw one
             // either - only a faint outline showing the wrap width.
-            calloutTextInput.style.background = isCallout ? '#fff' : 'rgba(255,255,255,0.9)';
+            calloutTextInput.style.background = isCallout ? '#fff'
+                : shape.fill ? fillColorOf(shape) : 'rgba(255,255,255,0.9)';
             calloutTextInput.style.borderStyle = isCallout ? 'solid' : 'dashed';
             calloutTextInput.style.boxSizing = 'border-box';
             // textHeightOf converts the stored size into canvas units; toScreen
@@ -4335,21 +4500,12 @@
             calloutTextInput.style.color = shape.color;
             calloutTextInput.style.display = 'block';
             calloutTextInput.value = shape.text || '';
-            sizeBlockEditor(shape, toScreen);
-
-            // Anchored under the editor, or above it when that would fall off
-            // the bottom - on a phone the keyboard takes the lower half. Without
-            // a visible Done there was no way to end an edit by touch.
-            const bar = document.getElementById('blockEditBar');
-            bar.classList.add('open');
-            const container = document.querySelector('.canvas-container');
-            const editorTop = origin.y + shape.y * toScreen;
-            const editorBottom = editorTop + calloutTextInput.offsetHeight;
-            const barH = 52;
-            bar.style.left = (origin.x + shape.x * toScreen) + 'px';
-            bar.style.top = (editorBottom + barH > container.clientHeight
-                ? Math.max(0, editorTop - barH)
-                : editorBottom + 8) + 'px';
+            document.getElementById('blockEditBar').classList.add('open');
+            BLOCK_GRIPS.forEach(id => document.getElementById(id).classList.add('open'));
+            // Callouts do not turn, so only text has an angle to show.
+            document.getElementById('blockAngleField').classList.toggle('hidden', !isTurnable(shape));
+            showBlockAngle(shape);
+            placeBlockEditor(shape);
 
             // Synchronous, so iOS raises the keyboard - same reason as the
             // single-line editor.
@@ -4366,6 +4522,7 @@
             editingBlock = null;
             isEditingText = false;
             document.getElementById('blockEditBar').classList.remove('open');
+            BLOCK_GRIPS.forEach(id => document.getElementById(id).classList.remove('open'));
             calloutTextInput.style.display = 'none';
             calloutTextInput.value = '';
 
@@ -4373,6 +4530,8 @@
                 // Undo the live writes, or an existing block cleared then
                 // cancelled would be deleted by the empty check below.
                 shape.text = editingOriginalText;
+                // And the width, if the grips moved it.
+                if (editingOriginalBox) Object.assign(shape, editingOriginalBox);
             } else {
                 // Trailing blank lines would silently pad the block's height, so
                 // they are trimmed. Line breaks within the text are kept.
@@ -4413,7 +4572,110 @@
             const rect = canvas.getBoundingClientRect();
             const toScreen = rect.width / canvas.width;
             editingBlock.text = calloutTextInput.value;
-            sizeBlockEditor(editingBlock, toScreen);
+            syncBlockHeight(editingBlock);
+            placeBlockEditor(editingBlock);
+        }
+
+        // Puts the editor over its block, the width grips on its sides, and
+        // Done and Cancel under it - or above it when that would fall off the
+        // bottom, since on a phone the keyboard takes the lower half. Without a
+        // visible Done there was no way to end an edit by touch. Called again
+        // as the block grows or its width is dragged, so the bar never ends up
+        // under a box that has grown over it.
+        const BLOCK_GRIPS = ['blockGripW', 'blockGripE'];
+        function placeBlockEditor(shape) {
+            const toScreen = canvas.getBoundingClientRect().width / canvas.width;
+            const origin = canvasOriginInContainer();
+            const f = blockFrame(shape);
+            const left = origin.x + shape.x * toScreen;
+            const top = origin.y + shape.y * toScreen;
+            const width = shape.w * toScreen;
+            calloutTextInput.style.left = left + 'px';
+            calloutTextInput.style.top = top + 'px';
+            calloutTextInput.style.width = width + 'px';
+            sizeBlockEditor(shape, toScreen);
+            // Turned with the block, about the block's own centre - which is
+            // not the editor's when its 16px floor makes it taller.
+            calloutTextInput.style.transformOrigin = `${width / 2}px ${f.h * toScreen / 2}px`;
+            calloutTextInput.style.transform = f.rot ? `rotate(${f.rot}rad)` : '';
+
+            // The grips sit on the block's sides, turned with it.
+            const screen = p => ({ x: origin.x + p.x * toScreen, y: origin.y + p.y * toScreen });
+            const sides = { blockGripW: f.toWorld(0, f.h / 2), blockGripE: f.toWorld(shape.w, f.h / 2) };
+            BLOCK_GRIPS.forEach(id => {
+                const grip = document.getElementById(id);
+                const at = screen(sides[id]);
+                grip.style.left = (at.x - grip.offsetWidth / 2) + 'px';
+                grip.style.top = (at.y - grip.offsetHeight / 2) + 'px';
+                grip.style.transform = f.rot ? `rotate(${f.rot}rad)` : '';
+            });
+
+            // Done and Cancel under everything the turned editor covers, or
+            // above it when that would fall off the bottom.
+            const container = document.querySelector('.canvas-container');
+            const cr = container.getBoundingClientRect();
+            const eb = calloutTextInput.getBoundingClientRect();
+            const boxTop = eb.top - cr.top, boxBottom = eb.bottom - cr.top;
+            const bar = document.getElementById('blockEditBar');
+            const barH = 52;
+            bar.style.left = Math.max(0, eb.left - cr.left) + 'px';
+            bar.style.top = (boxBottom + barH > container.clientHeight
+                ? Math.max(0, boxTop - barH)
+                : boxBottom + 8) + 'px';
+        }
+
+        function isTurnable(shape) { return !!shape && shape.type === 'text'; }
+
+        // Degrees, -180 to 180, whole numbers: what a person reads and types.
+        function showBlockAngle(shape) {
+            const field = document.getElementById('blockAngle');
+            let deg = Math.round(((shape.rotation || 0) * 180 / Math.PI) % 360);
+            if (deg > 180) deg -= 360;
+            if (deg <= -180) deg += 360;
+            if (Object.is(deg, -0)) deg = 0;
+            if (document.activeElement !== field) field.value = deg;
+        }
+
+        // Dragging a grip sets the width of the block being typed, from the
+        // side dragged; the other side stays put. Pressing it must not take
+        // focus from the editor, whose blur would end the edit.
+        function setupBlockGrips() {
+            BLOCK_GRIPS.forEach(id => {
+                const grip = document.getElementById(id);
+                const west = id === 'blockGripW';
+                let drag = null;
+                grip.addEventListener('pointerdown', e => {
+                    if (!editingBlock) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+                    drag = { id: e.pointerId, startX: e.clientX, startY: e.clientY,
+                             box: { x: editingBlock.x, y: editingBlock.y, w: editingBlock.w, h: editingBlock.h } };
+                });
+                grip.addEventListener('pointermove', e => {
+                    if (!drag || e.pointerId !== drag.id || !editingBlock) return;
+                    const toScreen = canvas.getBoundingClientRect().width / canvas.width;
+                    // How far the pointer has gone along the block, which is
+                    // across the screen only when the block is level.
+                    const rot = isTurnable(editingBlock) ? (editingBlock.rotation || 0) : 0;
+                    const along = ((e.clientX - drag.startX) * Math.cos(rot)
+                                 + (e.clientY - drag.startY) * Math.sin(rot)) / toScreen;
+                    // From the box the drag started on each time, so the
+                    // height re-wrapping changes in between cannot add up.
+                    Object.assign(editingBlock, drag.box);
+                    setBlockEdge(editingBlock, west ? 'w' : 'e', west ? along : drag.box.w + along);
+                    redraw();
+                    placeBlockEditor(editingBlock);
+                });
+                const end = e => {
+                    if (!drag || e.pointerId !== drag.id) return;
+                    drag = null;
+                    try { grip.releasePointerCapture(e.pointerId); } catch (err) {}
+                    calloutTextInput.focus();
+                };
+                grip.addEventListener('pointerup', end);
+                grip.addEventListener('pointercancel', end);
+            });
         }
 
         // The editor's height: the block's own laid-out height, so a new block
@@ -5483,7 +5745,7 @@
                         w: Math.min(canvas.width * 0.6, fitPxToCanvas(220)),
                         h: 0,
                         text: '',
-                        color, size,
+                        color, size, fill: fillDefault, fillColor: fillColorDefault,
                         fontSize: defaultFontSize,
                         fontFamily: defaultFontFamily,
                         fontWeight: defaultFontWeight,
@@ -5989,12 +6251,11 @@
                 if (handleType === 'callout-tip') {
                     selectedShape.tipX = x;
                     selectedShape.tipY = y;
-                } else if (handleType === 'block-w') {
-                    const right = selectedShape.x + selectedShape.w;
-                    selectedShape.x = Math.min(x, right - calloutMinWidth());
-                    selectedShape.w = right - selectedShape.x;
                 } else {
-                    selectedShape.w = Math.max(calloutMinWidth(), x - selectedShape.x);
+                    // Measured along the block, so a turned block's handle
+                    // follows the pointer the way it points.
+                    const local = blockFrame(selectedShape).toLocal(x, y).x;
+                    setBlockEdge(selectedShape, handleType === 'block-w' ? 'w' : 'e', local);
                 }
                 redraw();
                 return;
@@ -7132,7 +7393,30 @@
             
             // Text input events
             canvasTextInput.addEventListener('blur', handleTextInputBlur);
-            calloutTextInput.addEventListener('blur', () => finishBlockEditing(false));
+            // Focus going to the angle field is still the same edit.
+            calloutTextInput.addEventListener('blur', e => {
+                if (e.relatedTarget && e.relatedTarget.closest('#blockEditBar')) return;
+                finishBlockEditing(false);
+            });
+            const angleField = document.getElementById('blockAngle');
+            angleField.addEventListener('input', () => {
+                if (!editingBlock || !isTurnable(editingBlock)) return;
+                const deg = parseFloat(angleField.value);
+                if (!Number.isFinite(deg)) return;
+                editingBlock.rotation = deg * Math.PI / 180;
+                redraw();
+                placeBlockEditor(editingBlock);
+            });
+            angleField.addEventListener('keydown', e => {
+                if (e.key === 'Enter') { e.preventDefault(); calloutTextInput.focus(); }
+                else if (e.key === 'Escape') { e.preventDefault(); finishBlockEditing(true); }
+            });
+            angleField.addEventListener('blur', e => {
+                if (!editingBlock) return;
+                const to = e.relatedTarget;
+                if (to === calloutTextInput || (to && to.closest('#blockEditBar'))) return;
+                finishBlockEditing(false);
+            });
             document.getElementById('blockDone').addEventListener('pointerdown', e => {
                 e.preventDefault();
                 finishBlockEditing(false);
@@ -7143,6 +7427,7 @@
             });
             calloutTextInput.addEventListener('keydown', handleBlockInputKeyDown);
             calloutTextInput.addEventListener('input', handleBlockInput);
+            setupBlockGrips();
             canvasTextInput.addEventListener('keydown', handleTextInputKeyDown);
             
             // Window events
