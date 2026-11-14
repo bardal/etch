@@ -214,15 +214,16 @@ const mul = (a, b) => a.map((v, i) => Math.round(v * b[i] / 255));
     'wash.outside': PHOTO,
     'notOpaque': isTrue,
 
-    // The pen is still the pen: black, and its swatch showing black.
-    'penUndisturbed.pen': '#333333',
-    'penUndisturbed.swatch': '#333333',
+    // The pen is still the pen: red, the colour every tool but the marker
+    // starts with, and its swatch showing red.
+    'penUndisturbed.pen': '#e53935',
+    'penUndisturbed.swatch': '#e53935',
     'markerRemembers': '#00ff00',
     'secondColour': '#00ff00',
 
     'selectable.type': 'highlight',
     'selectable.handles': atLeast(4),
-    'selectable.pen': '#333333',
+    'selectable.pen': '#e53935',
     'noSnap': isTrue,
 
     'overTear.onPaper': mul(PHOTO, MARKER),

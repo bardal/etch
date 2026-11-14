@@ -17,6 +17,17 @@ const { finish, isTrue, isFalse, isEmpty, atLeast, near } = require('./expect');
     return el.tagName === 'TEXTAREA' && el.style.display === 'block' && document.activeElement === el;
   });
 
+  // A new, empty block's editor is a line tall from the start. It opened
+  // collapsed to its two dashed borders - a stray striped line under the
+  // cursor - because the block had no height until it was first drawn. The
+  // text inside has to fit too: the editor's font is never under 16px.
+  r.emptyEditor = await page.evaluate(() => {
+    const el = document.getElementById('calloutTextInput');
+    const b = el.getBoundingClientRect();
+    return { height: Math.round(b.height), line: Math.round(parseFloat(getComputedStyle(el).fontSize) * 1.25) };
+  });
+  r.emptyEditor.fits = r.emptyEditor.height >= r.emptyEditor.line;
+
   // Multi-line input: Enter should insert a break, not commit.
   await page.keyboard.type('First line');
   await page.keyboard.press('Enter');
@@ -73,6 +84,7 @@ const { finish, isTrue, isFalse, isEmpty, atLeast, near } = require('./expect');
 
   r.errors = realErrors(errors);
   finish(r, {
+    'emptyEditor.fits': isTrue,
     'multilineEditorUsed': isTrue,
     'enterMakesNewline': isTrue,
     'textWraps.lines': atLeast(2),

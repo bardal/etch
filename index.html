@@ -315,7 +315,7 @@
                now sits on a light chip the same size as the fill swatch, which
                also gives the pair equal visual weight. */
             background-color: #ececee;
-            background-image: linear-gradient(var(--stroke-color, #333333), var(--stroke-color, #333333));
+            background-image: linear-gradient(var(--stroke-color, #e53935), var(--stroke-color, #e53935));
             background-repeat: no-repeat;
             background-position: center;
             background-size: 70% var(--stroke-bar, 4px);
@@ -1927,7 +1927,7 @@
                 <div class="prop-group" id="lineGroup">
                     <span class="swatch-label" id="lineGroupLabel">Line</span>
                     <label class="swatch swatch-stroke" id="strokeSwatch" title="Line colour">
-                        <input type="color" id="color" value="#333333">
+                        <input type="color" id="color" value="#e53935">
                         <span class="swatch-preview" id="strokePreview"></span>
                     </label>
                     <span class="slider-box">
@@ -4313,7 +4313,6 @@
             calloutTextInput.style.left = (origin.x + shape.x * toScreen) + 'px';
             calloutTextInput.style.top = (origin.y + shape.y * toScreen) + 'px';
             calloutTextInput.style.width = (shape.w * toScreen) + 'px';
-            calloutTextInput.style.height = (shape.h * toScreen) + 'px';
             const isCallout = shape.type === 'callout';
             calloutTextInput.style.padding = (isCallout ? pad : 0) + 'px';
             // A plain text block has no box, so the editor should not draw one
@@ -4336,6 +4335,7 @@
             calloutTextInput.style.color = shape.color;
             calloutTextInput.style.display = 'block';
             calloutTextInput.value = shape.text || '';
+            sizeBlockEditor(shape, toScreen);
 
             // Anchored under the editor, or above it when that would fall off
             // the bottom - on a phone the keyboard takes the lower half. Without
@@ -4344,7 +4344,7 @@
             bar.classList.add('open');
             const container = document.querySelector('.canvas-container');
             const editorTop = origin.y + shape.y * toScreen;
-            const editorBottom = origin.y + (shape.y + shape.h) * toScreen;
+            const editorBottom = editorTop + calloutTextInput.offsetHeight;
             const barH = 52;
             bar.style.left = (origin.x + shape.x * toScreen) + 'px';
             bar.style.top = (editorBottom + barH > container.clientHeight
@@ -4413,8 +4413,22 @@
             const rect = canvas.getBoundingClientRect();
             const toScreen = rect.width / canvas.width;
             editingBlock.text = calloutTextInput.value;
-            const m = textBlockMetrics(editingBlock);
-            calloutTextInput.style.height = (m.height * toScreen) + 'px';
+            sizeBlockEditor(editingBlock, toScreen);
+        }
+
+        // The editor's height: the block's own laid-out height, so a new block
+        // with no text yet is still a line tall (its stored height is 0 until
+        // it is first drawn, which opened the editor as just its two dashed
+        // borders). Never less than a line of the editor's own font either,
+        // which is held at 16px or more for iOS and can outgrow the block's.
+        function sizeBlockEditor(shape, toScreen) {
+            const m = textBlockMetrics(shape);
+            const cs = getComputedStyle(calloutTextInput);
+            const frame = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth)
+                + parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+            const lines = Math.max(1, m.lines.length);
+            const ownLines = lines * parseFloat(cs.fontSize) * 1.25 + frame;
+            calloutTextInput.style.height = Math.max(m.height * toScreen, ownLines) + 'px';
         }
 
         // ===== PINCH / PAN =====
