@@ -37,6 +37,9 @@ for suite in tests/*-test.js; do
       catch { }
     });')
   if [ -n "$reasons" ]; then echo "$reasons"; else echo "$output" | tail -8; fi
+  # In CI the run is all there is to look at afterwards, so give the whole
+  # report: a reason says what was wrong, the report says what it was.
+  if [ -n "${GITHUB_ACTIONS:-}" ] && [ -n "$reasons" ]; then echo "$output" | tail -300; fi
   fail=$((fail+1))
 done
 
