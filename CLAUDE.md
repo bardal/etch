@@ -93,7 +93,11 @@ Each shape is a plain object with `type`, position/size fields, `color`, `size`,
 - **A tapped block fits its words.** `fitWidth` on a text block or callout is
   the width a tap gave it; `fitBlockToWords` makes it as wide as its widest
   line up to that, keeping the side the words are aligned to. Any width the
-  user sets deletes `fitWidth`. While typing it also leaves room for the
+  user sets deletes `fitWidth`. It is fitted again every time it is drawn
+  (`refitBlock`), because sizes in the picture follow how it fits the window
+  while the box's width is in picture pixels: a box fitted in one window
+  wrapped in a slightly smaller one, which is how CI first caught it. While
+  typing it also leaves room for the
   editor, whose font is held at 16px and can be larger than the words drawn -
   without that the editor wrapped a line the picture did not. Lines are
   drawn with the extra line space split above and below, as CSS does, so

@@ -4351,6 +4351,16 @@
             }
         }
 
+        // Fitted again whenever it is drawn, not only as it is typed: sizes in
+        // the picture are measured against how it fits the window, so another
+        // window draws the words larger or smaller, while the box's width is
+        // in picture pixels - a box fitted in one window wrapped its words in
+        // a slightly smaller one. The block being typed is fitted by the
+        // editor, which also leaves room for its own font.
+        function refitBlock(s) {
+            if (s.fitWidth && s !== editingBlock) fitBlockToWords(s);
+        }
+
         function calloutCornerRadius(s) {
             return Math.min(fitPxToCanvas(6), s.w / 2, s.h / 2);
         }
@@ -4421,6 +4431,7 @@
         // Draws the wrapped lines. Used by both the text tool and the callout,
         // so wrapping, line spacing and alignment behave identically in each.
         function drawTextBlock(s) {
+            refitBlock(s);
             const m = syncBlockHeight(s);
 
             ctx.save();
@@ -4447,6 +4458,7 @@
         }
 
         function drawCallout(s) {
+            refitBlock(s);
             const m = textBlockMetrics(s);
             s.h = m.height;
 

@@ -103,6 +103,18 @@ const shape = page => page.evaluate(() => {
   r.done = await shape(page);
   r.done.fits = fits(r.done);
 
+  // Sizes in a picture are measured against how it fits the window, so a
+  // different window draws the words larger or smaller. A fitted box must
+  // still fit them, not wrap. CI's window changed between typing and Done.
+  await page.setViewportSize({ width: 1100, height: 760 });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => redraw());
+  r.resized = await shape(page);
+  r.resized.fits = fits(r.resized);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.waitForTimeout(300);
+  await page.evaluate(() => redraw());
+
   // Typing more into it again grows it, up to the width a tap gives, then wraps.
   await page.evaluate(() => startBlockEditing(shapes[shapes.length - 1]));
   await page.keyboard.press('End');
@@ -217,6 +229,8 @@ const shape = page => page.evaluate(() => {
     'typing.editorMatches': isTrue,
     'done.fits': isTrue,
     'done.lines': 1,
+    'resized.lines': 1,
+    'resized.fits': isTrue,
     'long.w': w => w <= r.long.max + 0.5,
     'long.fits': isTrue,
     'long.lines': atLeast(2),
