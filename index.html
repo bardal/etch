@@ -4333,8 +4333,11 @@
                 s.w = current;
                 const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
                 const forEditor = whileTyping ? editorWidthNeeded(lines) : 0;
+                // Half a pixel over: where text measures in whole pixels (Linux),
+                // the widest line exactly filled the box, and the padding taken
+                // back off in rounding left it a hair too narrow - so it wrapped.
                 target = Math.min(s.fitWidth,
-                    Math.max(calloutMinWidth(), Math.ceil(widest) + blockPadding(s) * 2, forEditor));
+                    Math.max(calloutMinWidth(), Math.ceil(widest) + 0.5 + blockPadding(s) * 2, forEditor));
             }
             if (Math.abs(target - current) < 0.01) return;
             const align = s.textAlign || 'left';

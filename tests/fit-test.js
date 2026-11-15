@@ -49,7 +49,9 @@ async function tool(page, name) {
 }
 
 // As wide as the widest line, but never under the narrowest a block can be.
-const fits = s => Math.abs(s.w - Math.max(s.min, s.widest + 2 * s.padding)) <= 1;
+// Rounded up, and half a pixel more, so a line that fills it does not wrap.
+const fits = s => { const want = Math.max(s.min, s.widest + 2 * s.padding);
+                    return s.w >= want - 0.01 && s.w <= want + 2; };
 const shape = page => page.evaluate(() => {
   const s = shapes[shapes.length - 1];
   const m = textBlockMetrics(s);
@@ -187,6 +189,26 @@ const shape = page => page.evaluate(() => {
   r.zoomedOut.done = await shape(page);
   r.zoomedOut.done.fits = fits(r.zoomedOut.done);
 
+  // Where text measures in whole pixels (Linux, and so CI), a fitted box
+  // used to come out a hair too narrow and wrap its one line. Measure that
+  // way here, across sizes, so it shows on any machine.
+  r.wholePixels = await page.evaluate(() => {
+    const real = CanvasRenderingContext2D.prototype.measureText;
+    CanvasRenderingContext2D.prototype.measureText = function (t) {
+      const m = real.call(this, t);
+      return { width: Math.round(m.width) };
+    };
+    const wrapped = [];
+    for (let size = 10; size <= 40; size += 0.25) {
+      const s = { type: 'callout', x: 100, y: 100, w: 300, h: 0, tipX: 50, tipY: 50, text: 'Try this!',
+                  color: '#e53935', size: 3, fontSize: size, fill: true, fillColor: '#fff', fitWidth: 300, id: 900 };
+      fitBlockToWords(s);
+      if (textBlockMetrics(s).lines.length !== 1) wrapped.push(size);
+    }
+    CanvasRenderingContext2D.prototype.measureText = real;
+    return wrapped;
+  });
+
   r.errors = errors;
   finish(r, {
     'centred.off': atMost(r.centred.fontSize * 0.08),
@@ -207,6 +229,7 @@ const shape = page => page.evaluate(() => {
     'zoomedOut.drawnLines': 1,
     'zoomedOut.editorLines': 1,
     'zoomedOut.done.fits': isTrue,
+    'wholePixels': v => Array.isArray(v) && v.length === 0,
   });
   await browser.close();
 })().catch(e => { console.error('FAIL', e); process.exit(1); });
