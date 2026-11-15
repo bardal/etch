@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 No build step required. Open `index.html` in a browser to run the app.
 
-**Test:** `npm test` (or `./tests/run-all.sh`) — 33 Playwright suites driving a real Chromium against a served copy of the app, about two minutes in all. **Run the whole suite before pushing any change to `index.html`.** The same command gates the deploy in CI, so a change that fails here never reaches the site; finding that out locally costs two minutes, finding it out from CI costs a round trip.
+**Test:** `npm test` (or `./tests/run-all.sh`) — 34 Playwright suites driving a real Chromium against a served copy of the app, about two minutes in all. **Run the whole suite before pushing any change to `index.html`.** The same command gates the deploy in CI, so a change that fails here never reaches the site; finding that out locally costs two minutes, finding it out from CI costs a round trip.
 
 There is a suite per area — `zoom`, `pinch`, `rotate`, `line`, `crop`, `tear`, `undo`, `persist`, `paste`, `highlight`, `units`, `editorpos` and the rest. To iterate on one, serve the repo (`python3 -m http.server 8080 &`) and run it alone: `node tests/zoom-test.js`. It needs a real origin, not `file://` — IndexedDB, the clipboard and the service worker are all unavailable there. A suite passes by asserting its own report, not merely by the page not throwing, so a failure means behaviour changed. `tests/README.md` explains how a suite is written and the two-unit rule (`fitPxToCanvas` vs `screenPxToCanvas`) that most visual faults here have come down to.
 
@@ -90,6 +90,15 @@ Each shape is a plain object with `type`, position/size fields, `color`, `size`,
   `setBlockEdge` (handles, grips) both go through `keepTurnedBlockInPlace`.
   `textbox-test` checks the pixels, not just the angle, which is all
   `rotate-test` ever asked about.
+- **A tapped block fits its words.** `fitWidth` on a text block or callout is
+  the width a tap gave it; `fitBlockToWords` makes it as wide as its widest
+  line up to that, keeping the side the words are aligned to. Any width the
+  user sets deletes `fitWidth`. While typing it also leaves room for the
+  editor, whose font is held at 16px and can be larger than the words drawn -
+  without that the editor wrapped a line the picture did not. Lines are
+  drawn with the extra line space split above and below, as CSS does, so
+  the words sit in the middle of a callout and do not jump on Done.
+  `fit-test` holds it.
 - **Canvas redraw**: `redraw()` clears canvas, draws the base image, then iterates all shapes. Called after every state change.
 - **Torn page**: `tearPaths()` builds the ragged page outline from a seeded noise function (`tearRandom`/`tearSample`), cached against the canvas size and settings. `redraw()` clips the picture to it, so the strip a tear takes is cleared rather than painted — an export keeps the alpha. Depth is in `fitPx`, like stroke widths.
 

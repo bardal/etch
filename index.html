@@ -4316,6 +4316,38 @@
             return m;
         }
 
+        // A block put down with a tap carries `fitWidth`, the width the tap
+        // gave it, and fits its words as they are typed: as wide as its
+        // widest line, never wider than that, wrapping beyond it. "Try this!"
+        // in a fixed 200px box sat at its left with the rest of the box empty.
+        // The side the words are aligned to stays put. A width the user
+        // chooses - a box dragged out, a side dragged - drops `fitWidth`, so
+        // that width is kept from then on.
+        function fitBlockToWords(s, whileTyping = false) {
+            if (!s.fitWidth) return;
+            const current = s.w;
+            let target = s.fitWidth;
+            if (String(s.text || '').trim()) {
+                s.w = s.fitWidth;
+                const lines = wrapTextToWidth(s);
+                s.w = current;
+                const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+                const forEditor = whileTyping ? editorWidthNeeded(lines) : 0;
+                target = Math.min(s.fitWidth,
+                    Math.max(calloutMinWidth(), Math.ceil(widest) + blockPadding(s) * 2, forEditor));
+            }
+            if (Math.abs(target - current) < 0.01) return;
+            const align = s.textAlign || 'left';
+            if (align === 'right') {
+                setBlockEdge(s, 'w', current - target);
+            } else if (align === 'center') {
+                setBlockEdge(s, 'w', (current - target) / 2);
+                setBlockEdge(s, 'e', target);
+            } else {
+                setBlockEdge(s, 'e', target);
+            }
+        }
+
         function calloutCornerRadius(s) {
             return Math.min(fitPxToCanvas(6), s.w / 2, s.h / 2);
         }
@@ -4397,8 +4429,13 @@
             const textX = align === 'center' ? s.x + s.w / 2
                         : align === 'right' ? s.x + s.w - m.padding
                         : s.x + m.padding;
+            // A line is 1.25 times the font size. The extra quarter goes half
+            // above the words and half below, as it does in the editor (CSS
+            // line-height) - with all of it below, a callout's words sat high
+            // in their box and jumped up as Done was pressed.
+            const halfLeading = (m.lineHeight - textHeightOf(s)) / 2;
             m.lines.forEach((line, i) => {
-                ctx.fillText(line, textX, s.y + m.padding + i * m.lineHeight);
+                ctx.fillText(line, textX, s.y + m.padding + halfLeading + i * m.lineHeight);
             });
             ctx.textAlign = 'start';
             ctx.textBaseline = 'alphabetic';
@@ -4469,7 +4506,8 @@
             // Keystrokes are written straight onto the shape so the box grows as
             // you type, so cancelling has to put back what was there.
             editingOriginalText = String(shape.text || '');
-            editingOriginalBox = { x: shape.x, y: shape.y, w: shape.w, h: shape.h, rotation: shape.rotation || 0 };
+            editingOriginalBox = { x: shape.x, y: shape.y, w: shape.w, h: shape.h, rotation: shape.rotation || 0,
+                                   fitWidth: shape.fitWidth };
             isEditingText = true;
 
             const rect = canvas.getBoundingClientRect();
@@ -4536,6 +4574,7 @@
                 // Trailing blank lines would silently pad the block's height, so
                 // they are trimmed. Line breaks within the text are kept.
                 shape.text = text.replace(/\s+$/, '');
+                fitBlockToWords(shape);
             }
 
             // An empty callout is just a stray box; drop it rather than leave it.
@@ -4572,7 +4611,9 @@
             const rect = canvas.getBoundingClientRect();
             const toScreen = rect.width / canvas.width;
             editingBlock.text = calloutTextInput.value;
+            fitBlockToWords(editingBlock, true);
             syncBlockHeight(editingBlock);
+            redraw();
             placeBlockEditor(editingBlock);
         }
 
@@ -4663,6 +4704,7 @@
                     // From the box the drag started on each time, so the
                     // height re-wrapping changes in between cannot add up.
                     Object.assign(editingBlock, drag.box);
+                    delete editingBlock.fitWidth;
                     setBlockEdge(editingBlock, west ? 'w' : 'e', west ? along : drag.box.w + along);
                     redraw();
                     placeBlockEditor(editingBlock);
@@ -4683,6 +4725,25 @@
         // it is first drawn, which opened the editor as just its two dashed
         // borders). Never less than a line of the editor's own font either,
         // which is held at 16px or more for iOS and can outgrow the block's.
+        // The width, in canvas units, the editor needs for these lines
+        // not to wrap in it. More than the block's own when the picture is
+        // zoomed out: the editor's font is held at 16px so iOS does not zoom
+        // the page, which is then larger than the words drawn. A block fitting
+        // its words leaves this much room while typing, so the editor does not
+        // wrap a line the picture does not; Done fits it tight.
+        function editorWidthNeeded(lines) {
+            const toScreen = canvas.getBoundingClientRect().width / canvas.width;
+            const cs = getComputedStyle(calloutTextInput);
+            ctx.save();
+            ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+            const widest = Math.max(0, ...lines.map(l => ctx.measureText(l).width));
+            ctx.restore();
+            const frame = parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth)
+                + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+            // A pixel or two for the caret at the end of the line.
+            return (Math.ceil(widest) + frame + 3) / toScreen;
+        }
+
         function sizeBlockEditor(shape, toScreen) {
             const m = textBlockMetrics(shape);
             const cs = getComputedStyle(calloutTextInput);
@@ -5754,6 +5815,7 @@
                         rotation: 0,
                         id: newShapeId()
                     };
+                    block.fitWidth = block.w;
                     shapes.push(block);
                     selectedShape = block;
                     startBlockEditing(block);
@@ -5996,6 +6058,7 @@
                 const reach = Math.max(shape.w, shape.h) / 2 + fitPxToCanvas(70);
                 shape.tipX = bcx + (dx / len) * reach;
                 shape.tipY = bcy + (dy / len) * reach;
+                if (tapped) shape.fitWidth = shape.w;
                 shapes.push(shape);
                 selectedShape = shape;
                 drawing = false;
@@ -6255,6 +6318,7 @@
                     // Measured along the block, so a turned block's handle
                     // follows the pointer the way it points.
                     const local = blockFrame(selectedShape).toLocal(x, y).x;
+                    delete selectedShape.fitWidth;
                     setBlockEdge(selectedShape, handleType === 'block-w' ? 'w' : 'e', local);
                 }
                 redraw();
